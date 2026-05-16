@@ -1,0 +1,93 @@
+name: CI - Build, Push & Update GitOps
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ap-south-1                  # Fixed to Mumbai
+  AWS_ACCOUNT_ID: "379820351868"          # Your AWS ID
+  ECR_FRONTEND_REPO: frontend
+  ECR_BACKEND_REPO: backend
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        component: [frontend, backend]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::379820351868:role/github-actions-oidc-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          COMPONENT: ${{ matrix.component }}
+        run: |
+          cd app/$COMPONENT
+          IMAGE_TAG=git-${GITHUB_SHA::7}
+          docker build -t $ECR_REGISTRY/$COMPONENT:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$COMPONENT:$IMAGE_TAG
+          echo "TAG=$IMAGE_TAG" > ../../${COMPONENT}_tag.txt
+
+      - name: Upload Tag Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.component }}-tag
+          path: ${{ matrix.component滑_tag.txt
+
+  update-gitops:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download Frontend Tag
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-tag
+
+      - name: Download Backend Tag
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-tag
+
+      - name: Update Manifest Tags
+        run: |
+          FRONTEND_TAG=$(cat frontend_tag.txt || echo "latest")
+          BACKEND_TAG=$(cat backend_tag.txt || echo "latest")
+          REGISTRY="379820351868.dkr.ecr.ap-south-1.amazonaws.com"
+          
+          # Direct replacement over clean absolute paths
+          sed -i "s|image:.*frontend.*|image: $REGISTRY/frontend:$FRONTEND_TAG|g" gitops/frontend/deployment.yaml
+          sed -i "s|image:.*backend.*|image: $REGISTRY/backend:$BACKEND_TAG|g" gitops/backend/deployment.yaml
+
+      - name: Commit and Push Changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add gitops/
+          if git diff --cached --quiet; then
+            echo "No changes detected"
+          else
+            git commit -m "ci: pipeline automated image tag rotation [skip ci]"
+            git push
+          fi
