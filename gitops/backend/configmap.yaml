@@ -8,6 +8,4 @@ data:
   DB_PORT: "5432"
   DB_NAME: "appdb"
   DB_USER: "appuser"
-  # DB_PASSWORD should be a Secret, but for demo we keep here (NEVER in prod)
-  # In production, use Kubernetes Secrets and Sealed Secrets / External Secrets.
-  DB_PASSWORD: "supersecretpassword"
+  

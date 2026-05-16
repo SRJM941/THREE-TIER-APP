@@ -6,7 +6,7 @@ metadata:
   labels:
     app: backend
 spec:
-  replicas: 1                             # Optimized
+  replicas: 1                             # Optimized for single node memory footprint
   selector:
     matchLabels:
       app: backend
@@ -20,6 +20,12 @@ spec:
         image: 379820351868.dkr.ecr.ap-south-1.amazonaws.com/backend:latest
         ports:
         - containerPort: 4000
+        env:
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: backend-secret
+              key: DB_PASSWORD
         envFrom:
         - configMapRef:
             name: backend-config

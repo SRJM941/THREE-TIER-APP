@@ -2,3 +2,8 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: three-tier-app
+  labels:
+    # Baseline checks keep it secure but allow official standard images to run seamlessly
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
