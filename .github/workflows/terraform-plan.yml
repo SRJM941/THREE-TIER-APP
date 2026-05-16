@@ -1,0 +1,73 @@
+name: Terraform Plan
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ap-south-1                             # Fixed to Mumbai Region
+  TF_DIR: infrastructure/terraform/live/dev
+
+permissions:
+  id-token: write                                    # Mandated for AWS OIDC Handshake
+  contents: read
+  pull-requests: write                               # Required to comment plan output logs back to PR
+
+jobs:
+  terraform-plan:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.TF_DIR }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.7.0
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::379820351868:role/github-actions-oidc-role   # Directly embedded for absolute sync
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan -no-color -input=false -out=plan.tfplan 2>&1 | tee /tmp/plan-output.txt
+          echo "plan_exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Post Plan to PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            if (fs.existsSync('/tmp/plan-output.txt')) {
+              const planOutput = fs.readFileSync('/tmp/plan-output.txt', 'utf8');
+              const shortPlan = planOutput.length > 6000 ? planOutput.substring(0, 6000) + "\n...[Truncated due to size constraints]" : planOutput;
+              const body = `### 🚀 Terraform Plan Execution Output\n\n\`\`\`terraform\n${shortPlan}\n\`\`\``;
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
+            }
+
+      - name: Verify Plan Success Logs
+        run: |
+          if [ -f /tmp/plan-output.txt ] && grep -q "Error:" /tmp/plan-output.txt; then
+            echo "❌ Critical Terraform validation errors detected."
+            exit 1
+          fi

@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  AWS_REGION: ap-south-1                  # Fixed to Mumbai
+  AWS_REGION: ap-south-1                  # Mumbai Region
   AWS_ACCOUNT_ID: "379820351868"          # Your AWS ID
   ECR_FRONTEND_REPO: frontend
   ECR_BACKEND_REPO: backend
@@ -44,19 +44,20 @@ jobs:
           IMAGE_TAG=git-${GITHUB_SHA::7}
           docker build -t $ECR_REGISTRY/$COMPONENT:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$COMPONENT:$IMAGE_TAG
-          echo "TAG=$IMAGE_TAG" > ../../${COMPONENT}_tag.txt
+          echo "$IMAGE_TAG" > ../../${COMPONENT}_tag.txt
 
       - name: Upload Tag Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.component }}-tag
-          path: ${{ matrix.component滑_tag.txt
+          path: ${{ matrix.component }}_tag.txt
 
   update-gitops:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -76,7 +77,6 @@ jobs:
           BACKEND_TAG=$(cat backend_tag.txt || echo "latest")
           REGISTRY="379820351868.dkr.ecr.ap-south-1.amazonaws.com"
           
-          # Direct replacement over clean absolute paths
           sed -i "s|image:.*frontend.*|image: $REGISTRY/frontend:$FRONTEND_TAG|g" gitops/frontend/deployment.yaml
           sed -i "s|image:.*backend.*|image: $REGISTRY/backend:$BACKEND_TAG|g" gitops/backend/deployment.yaml
 
