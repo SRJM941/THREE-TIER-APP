@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: 379820351868.dkr.ecr.ap-south-1.amazonaws.com/frontend:git-57138fe
+        image: 379820351868.dkr.ecr.ap-south-1.amazonaws.com/frontend:git-055bd3f
         ports:
         - containerPort: 3000
         env:
