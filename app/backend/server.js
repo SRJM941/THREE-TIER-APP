@@ -36,6 +36,26 @@ app.get('/api/health', async (req, res) => {
   });
 });
 
+// Added the missing route that the Frontend is explicitly hitting
+app.get('/api/hello', async (req, res) => {
+  let dbStatus = 'disconnected';
+  try {
+    const client = await pool.connect();
+    const result = await client.query('SELECT 1');
+    client.release();
+    if (result) dbStatus = 'connected';
+  } catch (e) {
+    console.error('Database Connectivity Failure inside hello route:', e.message);
+    dbStatus = 'error';
+  }
+
+  res.json({
+    message: 'Hello from the enterprise backend!',
+    database: dbStatus,
+    timestamp: new Date().toISOString(),
+  });
+});
+
 app.use((req, res) => {
   res.status(404).json({ error: 'Route Configuration Not Found' });
 });
